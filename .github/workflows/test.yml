@@ -2,9 +2,9 @@ name: "Test action-ros-ci"
 on:
   pull_request:
   push:
-    branches:
-      - master
-      - "releases/*"
+    # branches:
+    #   - master
+    #   - "releases/*"
   schedule:
     # Run the CI automatically twice per day to look for flakyness.
     - cron: "0 */12 * * *"
@@ -77,37 +77,37 @@ jobs:
       - run: test -d "${{ steps.action-ros-ci.outputs.ros-workspace-directory-name }}/install/roscpp_tutorials"
         name: "Check that roscpp_tutorials install directory is present"
 
-  test_ros2:
-    name: "Test ROS 2 packages in repository"
-    runs-on: ${{ matrix.os }}
-    needs: pre_condition
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macOS-latest, windows-2019]
-        ros_distribution: [foxy, galactic, humble]
-    env: 
-      INSTALL_TYPE: ${{ matrix.os == 'windows-2019' && 'merged' || 'default' }}
-      INSTALL_PATH: ${{ matrix.os == 'windows-2019' && 'install/share' || 'install' }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3.0.0
-        with:
-          node-version: "12.x"
-      - run: .github/workflows/build-and-test.sh
-      - uses: ros-tooling/setup-ros@master
-        with:
-          required-ros-distributions: ${{ matrix.ros_distribution }}
-      - uses: ./
-        id: test_all_packages_in_repo
-        name: "Test all packages in single repo, default options"
-        with:
-          target-ros2-distro: ${{ matrix.ros_distribution }}
-          vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/repo_file_for_test_cpp_package.repos"
-      - name: "Check that osrf_testing_tools_cpp install directory is present in ${{ env.INSTALL_TYPE }} install space"
-        run: test -d "${{ steps.test_all_packages_in_repo.outputs.ros-workspace-directory-name }}/${{ env.INSTALL_PATH }}/osrf_testing_tools_cpp"
-      - name: "Check that test_osrf_testing_tools_cpp install directory is present in ${{ env.INSTALL_TYPE }} install space"
-        run: test -d "${{ steps.test_all_packages_in_repo.outputs.ros-workspace-directory-name }}/${{ env.INSTALL_PATH }}/test_osrf_testing_tools_cpp"
+  # test_ros2:
+  #   name: "Test ROS 2 packages in repository"
+  #   runs-on: ${{ matrix.os }}
+  #   needs: pre_condition
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [macOS-latest, windows-2019]
+  #       ros_distribution: [foxy, galactic, humble]
+  #   env: 
+  #     INSTALL_TYPE: ${{ matrix.os == 'windows-2019' && 'merged' || 'default' }}
+  #     INSTALL_PATH: ${{ matrix.os == 'windows-2019' && 'install/share' || 'install' }}
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-node@v3.0.0
+  #       with:
+  #         node-version: "12.x"
+  #     - run: .github/workflows/build-and-test.sh
+  #     - uses: ros-tooling/setup-ros@master
+  #       with:
+  #         required-ros-distributions: ${{ matrix.ros_distribution }}
+  #     - uses: ./
+  #       id: test_all_packages_in_repo
+  #       name: "Test all packages in single repo, default options"
+  #       with:
+  #         target-ros2-distro: ${{ matrix.ros_distribution }}
+  #         vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/repo_file_for_test_cpp_package.repos"
+  #     - name: "Check that osrf_testing_tools_cpp install directory is present in ${{ env.INSTALL_TYPE }} install space"
+  #       run: test -d "${{ steps.test_all_packages_in_repo.outputs.ros-workspace-directory-name }}/${{ env.INSTALL_PATH }}/osrf_testing_tools_cpp"
+  #     - name: "Check that test_osrf_testing_tools_cpp install directory is present in ${{ env.INSTALL_TYPE }} install space"
+  #       run: test -d "${{ steps.test_all_packages_in_repo.outputs.ros-workspace-directory-name }}/${{ env.INSTALL_PATH }}/test_osrf_testing_tools_cpp"
         
 
   test_ros2_foxy_package_with_dependencies:
@@ -124,6 +124,39 @@ jobs:
           package-name: rmw
           target-ros2-distro: foxy
           vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/repo_file_for_test_cpp_with_dependency.repos"
+
+  test_ros2_foxy_rosdep_skip_keys:
+    name: "Test with rosdep-skip-keys option"
+    runs-on: ubuntu-20.04
+    needs: pre_condition
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ros-tooling/setup-ros@v0.3
+        with:
+          required-ros-distributions: foxy
+      # Skip installing test_depend dependency and verifies it isn't installed.
+      - uses: ./
+        with:
+          package-name: rmw
+          target-ros2-distro: foxy
+          vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/repo_file_for_test_cpp_with_dependency.repos"
+          extra-cmake-args: -DBUILD_TESTING=Off
+          skip-tests: true
+          rosdep-skip-keys: osrf_testing_tools_cpp
+      - name: Install dpkg
+        run: sudo apt -y install dpkg
+      - name: "Verify dependencies were skipped"
+        run: |
+          [[ $(dpkg -s ros-foxy-osrf-testing-tools-cpp) -eq 0 ]]
+      # Install dependencies as usual and verifies it is now installed.
+      - uses: ./
+        with:
+          package-name: rmw
+          target-ros2-distro: foxy
+          vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/repo_file_for_test_cpp_with_dependency.repos"
+      - name: "Verify dependencies weren't skipped"
+        run: |
+          dpkg -s ros-foxy-osrf-testing-tools-cpp
 
   test_private_repo:
     name: "Test with private repos"
